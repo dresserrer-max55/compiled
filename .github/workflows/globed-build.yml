@@ -112,8 +112,19 @@ jobs:
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DANDROID_PLATFORM=android-23 -DANDROID_STL=c++_shared -DANDROID_ABI=arm64-v8a \
             -DGEODE_GD_VERSION="$GD_VERSION" -DGEODE_COMP_GD_VERSION="$GD_COMP_VERSION" 2>&1 | tee "$GITHUB_WORKSPACE/loader.log"
-          cmake --build loader-build --parallel 2>&1 | tee -a "$GITHUB_WORKSPACE/loader.log"
+          cmake --build loader-build --parallel -- -k 0 2>&1 | tee -a "$GITHUB_WORKSPACE/loader.log"
           ls -la bin/nightly/Geode.android64.so
+
+      - name: Errores del loader (resumen)
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          {
+            echo "## Errores al compilar el loader"
+            echo '```'
+            grep -n -B1 -A12 -E 'FAILED:|error:|CMake Error|undefined reference|ld: error|fatal error' loader.log | head -150
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Diagnostico de asp2 (CPM)
         if: ${{ !cancelled() }}
