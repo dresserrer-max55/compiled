@@ -105,6 +105,15 @@ jobs:
           NDK=/usr/local/lib/android/sdk/ndk/29.0.14206865
           [ -d "$NDK" ] || NDK="$ANDROID_NDK_LATEST_HOME"
           cd "$GEODE_SDK"
+          # Parche de bindings (rama main en plena reforma, 21-oct): inline/EditorPauseLayer.cpp de 2.2091 asigna
+          # m_guidelinesOffButton/m_guidelinesOnButton, pero esos miembros ya no estan declarados en el .bro
+          # -> "use of undeclared identifier". Se borran esas dos lineas (solo ponian punteros a nullptr).
+          patch_bindings() {
+            find "$@" -path '*bindings/2.2091/inline/EditorPauseLayer.cpp' 2>/dev/null | while read -r f; do
+              sed -i '/m_guidelinesOffButton = nullptr;/d; /m_guidelinesOnButton = nullptr;/d' "$f"
+              echo "bindings parcheado: $f"
+            done
+          }
           cmake -B loader-build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DGEODE_CODEGEN_CMAKE_ARGS="-DCMAKE_C_COMPILER=clang;-DCMAKE_CXX_COMPILER=clang++;-G Ninja" \
@@ -112,6 +121,7 @@ jobs:
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DANDROID_PLATFORM=android-23 -DANDROID_STL=c++_shared -DANDROID_ABI=arm64-v8a \
             -DGEODE_GD_VERSION="$GD_VERSION" -DGEODE_COMP_GD_VERSION="$GD_COMP_VERSION" 2>&1 | tee "$GITHUB_WORKSPACE/loader.log"
+          patch_bindings loader-build/_deps 2>&1 | tee -a "$GITHUB_WORKSPACE/loader.log"
           cmake --build loader-build --parallel -- -k 0 2>&1 | tee -a "$GITHUB_WORKSPACE/loader.log"
           ls -la bin/nightly/Geode.android64.so
 
@@ -141,6 +151,15 @@ jobs:
           NDK=/usr/local/lib/android/sdk/ndk/29.0.14206865
           [ -d "$NDK" ] || NDK="$ANDROID_NDK_LATEST_HOME"
           cd globed_src
+          # Parche de bindings (rama main en plena reforma, 21-oct): inline/EditorPauseLayer.cpp de 2.2091 asigna
+          # m_guidelinesOffButton/m_guidelinesOnButton, pero esos miembros ya no estan declarados en el .bro
+          # -> "use of undeclared identifier". Se borran esas dos lineas (solo ponian punteros a nullptr).
+          patch_bindings() {
+            find "$@" -path '*bindings/2.2091/inline/EditorPauseLayer.cpp' 2>/dev/null | while read -r f; do
+              sed -i '/m_guidelinesOffButton = nullptr;/d; /m_guidelinesOnButton = nullptr;/d' "$f"
+              echo "bindings parcheado: $f"
+            done
+          }
           set +e
           {
             cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -152,6 +171,7 @@ jobs:
               -DGEODE_DONT_INSTALL_MODS=ON -DGEODE_TARGET_PLATFORM=Android64 \
               -DGEODE_GD_VERSION="$GD_VERSION" -DGEODE_COMP_GD_VERSION="$GD_COMP_VERSION" \
               -DGLOBED_RELEASE=ON \
+            && patch_bindings build/_deps "$GEODE_SDK/build" \
             && cmake --build build --config Release --parallel -- -k 0
           } 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
           code=${PIPESTATUS[0]}
