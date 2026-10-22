@@ -166,13 +166,22 @@ jobs:
               ("entry.path().filename()", "std::filesystem::path(entry.path.string()).filename()"),
               ("em.registerSfx(num, entry.path());", "em.registerSfx(num, std::filesystem::path(entry.path.string()));")])
 
+          sub("src/core/hooks/GJBaseGameLayer.cpp", [("auto& [id, player] = rw.get();", "auto& [id, player] = rw;")])
+          sub("src/core/preload/PreloadManager.cpp", [
+              ("return item.get().iconType", "return item.iconType"),
+              ("asp::fs::equivalent(fspath, highGraphicsFolder).unwrapOr(false)", "asp::fs::Path(fspath.string()).equivalent(asp::fs::Path(highGraphicsFolder))"),
+              ("!asp::fs::equivalent(fspath, textureLdrUnzipped).unwrapOr(false)", "!asp::fs::Path(fspath.string()).equivalent(asp::fs::Path(textureLdrUnzipped))")])
+          sub("src/modules/switcheroo/Hooks.hpp", [("bool init(GJGameLevel* level, bool a, bool b);", "bool init(GJGameLevel* level, bool b);")])
+          sub("src/ui/misc/LoadingPopup.cpp", [("m_title->limitLabelWidth(", "m_title->setLimitLabelWidth(")])
+          sub("src/modules/scripting-ui/ui/SetupFireServerPopup.cpp", [(".child(Build<Label>::create(name, \"bigFont.fnt\").limitLabelWidth(36.f, 0.45f, 0.1f))", ".child(Build<Label>::create(name, \"bigFont.fnt\").with([](Label* l) { l->setLimitLabelWidth(36.f, 0.45f, 0.1f); }))")])
+
           # devtools (API de eventos de Geode v5, no existe en v6)
           sub("src/ui/menu/GlobedMenuLayer.cpp", [("#include <geode.devtools/include/API.hpp>", ""), ("devtools::isOpen()", "false")])
 
           # soft-link API (usa GEODE_EVENT_EXPORT, eliminado en v6): sin integracion con otros mods
           sub("include/globed/soft-link/Table.hpp", [(
               "inline geode::Result<RootApiTable*> getRootTable() GEODE_EVENT_EXPORT(&getRootTable, ());",
-              "inline geode::Result<RootApiTable*> getRootTable() { return geode::Err(\"soft-link no disponible en Geode v6\"); }")])
+              "geode::Result<RootApiTable*> getRootTable();")])
           PY
           grep -rn "pathToString" globed_src/src globed_src/include || echo "sin pathToString"
 
