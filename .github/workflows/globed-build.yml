@@ -166,6 +166,23 @@ jobs:
               -DGEODE_GD_VERSION="$GD_VERSION" -DGEODE_COMP_GD_VERSION="$GD_COMP_VERSION" \
               -DGEODE_BINDINGS_REPO_PATH="$GEODE_BINDINGS_REPO_PATH" \
               -DGLOBED_RELEASE=ON \
+            && {
+              echo "== Parcheando qunet/argon para asp 1.5.x =="
+              C="$GITHUB_WORKSPACE/cpm-cache"
+              Q=$(find "$C/qunet-cpp" -name QunetDatabase.cpp -path '*src/database*' | head -1)
+              S=$(find "$C/qunet-cpp" -name Socket.cpp -path '*src/socket*' | head -1)
+              A=$(find "$C/argon" -name ArgonStorage.cpp | head -1)
+              echo "$Q"; echo "$S"; echo "$A"
+              sed -i -e 's|asp::fs::exists(qdbPath)|asp::fs::exists(qdbPath.string())|' \
+                     -e 's|asp::fs::read(qdbPath)|asp::fs::read(qdbPath.string())|' \
+                     -e 's|asp::fs::exists(folder)|asp::fs::exists(folder.string())|' \
+                     -e 's|asp::fs::createDirAll(folder)|asp::fs::createDirAll(folder.string())|' \
+                     -e 's|asp::fs::write(qdbPath, data)|asp::fs::write(qdbPath.string(), data)|' "$Q"
+              sed -i 's|Saving Qunet database to {:?}", \*m_qdbFolder)|Saving Qunet database to {:?}", m_qdbFolder->string())|' "$S"
+              sed -i 's|asp::fs::isFile(storagePath)|asp::fs::isFile(storagePath.string())|' "$A"
+              git -C "$C" diff --stat 2>/dev/null || true
+              grep -n "\.string())" "$Q" "$S" "$A" | head -20
+            } \
             && cmake --build build --config Release --parallel -- -k 0
           } 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
           code=${PIPESTATUS[0]}
