@@ -94,7 +94,14 @@ jobs:
           edit(f"{root}/include/globed/util/singleton.hpp", single)
 
           def prelude(t):
-              inc = "#include <asp/iter/std.hpp>\n#include <asp/fs/std.hpp>\n"
+              inc = ("#include <asp/iter/std.hpp>\n#include <asp/fs/std.hpp>\n#include <filesystem>\n#include <string>\n#include <concepts>\n"
+                     "namespace globed {\n"
+                     "inline std::string pathToStr(const char* s) { return s ? s : \"\"; }\n"
+                     "inline std::string pathToStr(const std::string& s) { return s; }\n"
+                     "inline std::string pathToStr(const std::filesystem::path& p) { return p.string(); }\n"
+                     "template <typename P> requires (!std::is_same_v<P, std::filesystem::path> && requires(const P& p) { { p.string() } -> std::convertible_to<std::string>; })\n"
+                     "inline std::string pathToStr(const P& p) { return p.string(); }\n"
+                     "}\n")
               return t if "asp/iter/std.hpp" in t else t.replace("#pragma once\n", "#pragma once\n\n" + inc, 1)
           edit(f"{root}/include/globed/prelude.hpp", prelude)
 
@@ -111,9 +118,61 @@ jobs:
                   while depth:
                       c = t[j]; depth += (c == "(") - (c == ")"); j += 1
                   arg = t[i+len(key):j-1]
-                  t = t[:st] + "((" + arg + ").string())" + t[j:]
+                  t = t[:st] + "::globed::pathToStr(" + arg + ")" + t[j:]
           for f in glob.glob(f"{root}/src/**/*.[ch]pp", recursive=True) + glob.glob(f"{root}/include/**/*.hpp", recursive=True):
               edit(f, lambda t: paths(t) if "pathToString(" in t else t)
+
+          # ---------- resto de parches ----------
+          def rd(p): return open(f"{root}/{p}", encoding="utf-8").read()
+          def sub(p, pairs):
+              path = f"{root}/{p}"
+              if not os.path.isfile(path):
+                  print("NO EXISTE", p); return
+              def fn(t):
+                  for a, b in pairs:
+                      if a not in t: print("  (no encontrado en", p, "):", a[:60])
+                      t = t.replace(a, b)
+                  return t
+              edit(path, fn)
+
+          # gd:: -> std::
+          for f in glob.glob(f"{root}/src/**/*.[ch]pp", recursive=True) + glob.glob(f"{root}/include/**/*.hpp", recursive=True):
+              edit(f, lambda t: t.replace("gd::string", "std::string").replace("gd::vector", "std::vector"))
+
+          # firma de PlayLayer en 2.2091
+          for p in ("src/core/hooks/PlayLayer.cpp", "src/modules/switcheroo/Hooks.cpp"):
+              sub(p, [("init(GJGameLevel* level, bool a, bool b)", "init(GJGameLevel* level, bool b)"),
+                      ("PlayLayer::init(level, a, b)", "PlayLayer::init(level, b)")])
+          for p in ("src/core/actions.cpp", "src/ui/menu/WarpLoadPopup.cpp"):
+              sub(p, [("PlayLayer::scene(classify.level, false, false)", "PlayLayer::scene(classify.level, false)"),
+                      ("PlayLayer::scene(level, false, false)", "PlayLayer::scene(level, false)")])
+
+          # asp::Duration ya no es un Result
+          sub("src/modules/switcheroo/Hooks.cpp", [("*asp::Duration::fromSecs(", "asp::Duration::fromSecs(")])
+          sub("src/core/hooks/GJBaseGameLayer.cpp", [("Duration::fromSecsF32(1.f / 30.f).value()", "Duration::fromSecsF32(1.f / 30.f)"),
+                                                      ("Duration::fromSecsF32(val).value()", "Duration::fromSecsF32(val)")])
+
+          # iteradores de asp 1.5
+          sub("src/core/net/EventEncoder.cpp", [("find([&](auto& el) {", "find([&](auto&& el) {")])
+          sub("src/ui/game/ProfilerOverlay.cpp", [("[](auto ref) { return ref.get().second.totalTime", "[](auto&& ref) { return ref.second.totalTime")])
+          sub("src/ui/menu/RoomListingPopup.cpp", [("RoomListingCell::create(room.get(), this)", "RoomListingCell::create(room, this)")])
+          sub("src/audio/AudioManager.cpp", [("std::string s = asp::iter::from(str).filter([](char c) {\n        return c != '-';\n    }).collect<std::string>();",
+                                              "std::string s;\n    for (char c : str) { if (c != '-') s.push_back(c); }")])
+
+          # iterdir -> iterDir
+          sub("src/core/EmoteManager.cpp", [
+              ("asp::fs::iterdir(Mod::get()->getResourcesDir())", "asp::fs::iterDir(Mod::get()->getResourcesDir())"),
+              ("for (auto& entry : *res) {\n            auto name", "for (auto&& entryRes : *res) {\n            if (!entryRes) continue;\n            auto entry = std::move(entryRes).unwrap();\n            auto name"),
+              ("entry.path().filename()", "std::filesystem::path(entry.path.string()).filename()"),
+              ("em.registerSfx(num, entry.path());", "em.registerSfx(num, std::filesystem::path(entry.path.string()));")])
+
+          # devtools (API de eventos de Geode v5, no existe en v6)
+          sub("src/ui/menu/GlobedMenuLayer.cpp", [("#include <geode.devtools/include/API.hpp>", ""), ("devtools::isOpen()", "false")])
+
+          # soft-link API (usa GEODE_EVENT_EXPORT, eliminado en v6): sin integracion con otros mods
+          sub("include/globed/soft-link/Table.hpp", [(
+              "inline geode::Result<RootApiTable*> getRootTable() GEODE_EVENT_EXPORT(&getRootTable, ());",
+              "inline geode::Result<RootApiTable*> getRootTable() { return geode::Err(\"soft-link no disponible en Geode v6\"); }")])
           PY
           grep -rn "pathToString" globed_src/src globed_src/include || echo "sin pathToString"
 
@@ -245,6 +304,16 @@ jobs:
               t = t.replace('static_assert(g_urlOffset.valid, "Unsupported GD version");', '')
               return t
           patch("argon/*/src/Web.cpp", web)
+
+          def aspath(t):
+              if "std::filesystem::path& p) : m_path" in t: return t
+              t = t.replace("#pragma once", "#pragma once\n#include <filesystem>", 1)
+              t = t.replace("    PathView(const char* path) : m_path(path) {}\n",
+                            "    PathView(const char* path) : m_path(path) {}\n    PathView(const std::filesystem::path& p) : m_path(p.native()) {}\n", 1)
+              t = t.replace("    Path(const char* path) : m_path(path) {}\n",
+                            "    Path(const char* path) : m_path(path) {}\n    Path(const std::filesystem::path& p) : m_path(p.string()) {}\n    operator std::filesystem::path() const { return std::filesystem::path(this->string()); }\n", 1)
+              return t
+          patch("asp2/*/include/asp/fs/Path.hpp", aspath)
           PY
             } \
             && cmake --build build --config Release --parallel -- -k 0
