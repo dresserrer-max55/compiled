@@ -306,12 +306,12 @@ jobs:
           patch("argon/*/src/Web.cpp", web)
 
           def aspath(t):
-              if "std::filesystem::path& p) : m_path" in t: return t
+              if "is_same_v<P, std::filesystem::path>" in t: return t
               t = t.replace("#pragma once", "#pragma once\n#include <filesystem>", 1)
               t = t.replace("    PathView(const char* path) : m_path(path) {}\n",
-                            "    PathView(const char* path) : m_path(path) {}\n    PathView(const std::filesystem::path& p) : m_path(p.native()) {}\n", 1)
+                            "    PathView(const char* path) : m_path(path) {}\n    template <typename P> requires std::is_same_v<P, std::filesystem::path> PathView(const P& p) : m_path(p.native()) {}\n", 1)
               t = t.replace("    Path(const char* path) : m_path(path) {}\n",
-                            "    Path(const char* path) : m_path(path) {}\n    Path(const std::filesystem::path& p) : m_path(p.string()) {}\n    operator std::filesystem::path() const { return std::filesystem::path(this->string()); }\n", 1)
+                            "    Path(const char* path) : m_path(path) {}\n    template <typename P> requires std::is_same_v<P, std::filesystem::path> Path(const P& p) : m_path(p.string()) {}\n    operator std::filesystem::path() const { return std::filesystem::path(this->string()); }\n", 1)
               return t
           patch("asp2/*/include/asp/fs/Path.hpp", aspath)
           PY
