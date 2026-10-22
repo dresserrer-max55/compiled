@@ -77,6 +77,46 @@ jobs:
             grep -n 'parcheado' geobuild.py
           fi
 
+      - name: Parchear fuentes de Globed para Geode v6 / asp 1.5 / arc nuevo
+        shell: bash
+        run: |
+          python3 - globed_src <<'PY'
+          import sys, re, glob, os
+          root = sys.argv[1]
+          def edit(path, fn):
+              t = open(path, encoding="utf-8").read(); n = fn(t)
+              if n != t:
+                  open(path, "w", encoding="utf-8").write(n); print("parcheado", path)
+
+          def single(t):
+              return t.replace("auto [p, size] = arc::getTypename<T>();\n    return {p, size};",
+                               "return std::string_view(arc::getTypename<T>());")
+          edit(f"{root}/include/globed/util/singleton.hpp", single)
+
+          def prelude(t):
+              inc = "#include <asp/iter/std.hpp>\n#include <asp/fs/std.hpp>\n"
+              return t if "asp/iter/std.hpp" in t else t.replace("#pragma once\n", "#pragma once\n\n" + inc, 1)
+          edit(f"{root}/include/globed/prelude.hpp", prelude)
+
+          def paths(t):
+              key = "pathToString("
+              while True:
+                  i = t.find(key)
+                  if i < 0: return t
+                  # retroceder sobre el prefijo de namespace
+                  st = i
+                  while st > 0 and (t[st-1].isalnum() or t[st-1] in "_:"):
+                      st -= 1
+                  j = i + len(key); depth = 1
+                  while depth:
+                      c = t[j]; depth += (c == "(") - (c == ")"); j += 1
+                  arg = t[i+len(key):j-1]
+                  t = t[:st] + "((" + arg + ").string())" + t[j:]
+          for f in glob.glob(f"{root}/src/**/*.[ch]pp", recursive=True) + glob.glob(f"{root}/include/**/*.hpp", recursive=True):
+              edit(f, lambda t: paths(t) if "pathToString(" in t else t)
+          PY
+          grep -rn "pathToString" globed_src/src globed_src/include || echo "sin pathToString"
+
       - name: Install Ninja
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
@@ -194,7 +234,7 @@ jobs:
                 lambda t: t.replace('Saving Qunet database to {:?}", *m_qdbFolder)', 'Saving Qunet database to {:?}", m_qdbFolder->string())'))
 
           patch("argon/*/src/ArgonStorage.cpp",
-                lambda t: "#include <filesystem>\n" + t.replace("asp::fs::isFile(storagePath)", "std::filesystem::is_regular_file(storagePath)"))
+                lambda t: t.replace("asp::fs::isFile(storagePath)", "storagePath.isFile()"))
 
           def web(t):
               t = t.replace('#include "external/ServerAPIEvents.hpp"', '')
@@ -214,7 +254,7 @@ jobs:
             {
               echo "## Error compilando Globed"
               echo '```'
-              grep -n -B1 -A14 -E 'FAILED:|error:|CMake Error|undefined reference|ld: error|fatal error' "$GITHUB_WORKSPACE/build.log" | head -150
+              grep -E '^/.*(error|fatal error):|CMake Error|undefined reference|ld: error' "$GITHUB_WORKSPACE/build.log" | sed 's|/home/runner/work/compiled/compiled/||' | sort -u | cut -c1-260 | head -250
               echo '```'
             } | tee -a "$GITHUB_STEP_SUMMARY"
             exit $code
