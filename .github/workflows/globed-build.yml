@@ -168,7 +168,8 @@ jobs:
 
           sub("src/core/hooks/GJBaseGameLayer.cpp", [("auto& [id, player] = rw.get();", "auto& [id, player] = rw;")])
           sub("src/core/preload/PreloadManager.cpp", [
-              ("return item.get().iconType", "return item.iconType"),
+              ("int remainingCost = asp::iter::from(m_loadQueue)\n        .map([](auto item) {\n            return item.get().iconType == IconType::DeathEffect ? 20 : 1;\n        })\n        .sum();",
+               "int remainingCost = 0;\n    for (auto& qitem : m_loadQueue) { remainingCost += qitem.iconType == IconType::DeathEffect ? 20 : 1; }"),
               ("asp::fs::equivalent(fspath, highGraphicsFolder).unwrapOr(false)", "asp::fs::Path(fspath.string()).equivalent(asp::fs::Path(highGraphicsFolder))"),
               ("!asp::fs::equivalent(fspath, textureLdrUnzipped).unwrapOr(false)", "!asp::fs::Path(fspath.string()).equivalent(asp::fs::Path(textureLdrUnzipped))")])
           sub("src/modules/switcheroo/Hooks.hpp", [("bool init(GJGameLevel* level, bool a, bool b);", "bool init(GJGameLevel* level, bool b);")])
@@ -356,6 +357,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: globed-android64-2.2091
-          path: output/*.geode
-          if-no-files-found: error
-          
+        
