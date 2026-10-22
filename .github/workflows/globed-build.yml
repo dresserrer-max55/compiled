@@ -16,8 +16,6 @@ on:
   push:
     branches:
       - "**"
-    paths:
-      - '.github/workflows/globed-build.yml'
 
 env:
   GD_VERSION: "2.2091"
@@ -357,4 +355,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: globed-android64-2.2091
-        
+          path: |
+            output/dankmeme.globed2.geode
+    
