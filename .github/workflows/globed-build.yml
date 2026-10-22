@@ -109,10 +109,15 @@ jobs:
           # m_guidelinesOffButton/m_guidelinesOnButton, pero esos miembros ya no estan declarados en el .bro
           # -> "use of undeclared identifier". Se borran esas dos lineas (solo ponian punteros a nullptr).
           patch_bindings() {
-            find "$@" -path '*bindings/2.2091/inline/EditorPauseLayer.cpp' 2>/dev/null | while read -r f; do
-              sed -i '/m_guidelinesOffButton = nullptr;/d; /m_guidelinesOnButton = nullptr;/d' "$f"
-              echo "bindings parcheado: $f"
+            local d f
+            for d in "$@"; do
+              [ -d "$d" ] || continue
+              while IFS= read -r f; do
+                sed -i '/m_guidelinesOffButton = nullptr;/d; /m_guidelinesOnButton = nullptr;/d' "$f"
+                echo "bindings parcheado: $f"
+              done < <(find "$d" -path '*bindings/2.2091/inline/EditorPauseLayer.cpp' || true)
             done
+            return 0
           }
           cmake -B loader-build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -155,10 +160,15 @@ jobs:
           # m_guidelinesOffButton/m_guidelinesOnButton, pero esos miembros ya no estan declarados en el .bro
           # -> "use of undeclared identifier". Se borran esas dos lineas (solo ponian punteros a nullptr).
           patch_bindings() {
-            find "$@" -path '*bindings/2.2091/inline/EditorPauseLayer.cpp' 2>/dev/null | while read -r f; do
-              sed -i '/m_guidelinesOffButton = nullptr;/d; /m_guidelinesOnButton = nullptr;/d' "$f"
-              echo "bindings parcheado: $f"
+            local d f
+            for d in "$@"; do
+              [ -d "$d" ] || continue
+              while IFS= read -r f; do
+                sed -i '/m_guidelinesOffButton = nullptr;/d; /m_guidelinesOnButton = nullptr;/d' "$f"
+                echo "bindings parcheado: $f"
+              done < <(find "$d" -path '*bindings/2.2091/inline/EditorPauseLayer.cpp' || true)
             done
+            return 0
           }
           set +e
           {
